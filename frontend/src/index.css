@@ -1,0 +1,131 @@
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Tajawal:wght@400;500;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --font-heading: "Outfit", "Tajawal", sans-serif;
+    --font-body: "IBM Plex Sans", "Tajawal", sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
+}
+
+html[dir="rtl"] {
+    --font-heading: "Tajawal", "Outfit", sans-serif;
+    --font-body: "Tajawal", "IBM Plex Sans", sans-serif;
+}
+
+body {
+    margin: 0;
+    font-family: var(--font-body);
+    background-color: #ffffff;
+    color: #0a0a0a;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-heading {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+}
+
+.font-mono,
+code,
+pre {
+    font-family: var(--font-mono);
+}
+
+@layer base {
+    :root {
+        --background: 0 0% 100%;
+        --foreground: 0 0% 4%;
+        --card: 0 0% 100%;
+        --card-foreground: 0 0% 4%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 0 0% 4%;
+        --primary: 0 0% 4%;
+        --primary-foreground: 0 0% 98%;
+        --secondary: 240 5% 96%;
+        --secondary-foreground: 0 0% 9%;
+        --muted: 240 5% 96%;
+        --muted-foreground: 240 4% 32%;
+        --accent: 240 5% 96%;
+        --accent-foreground: 0 0% 9%;
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 220 13% 91%;
+        --input: 220 13% 91%;
+        --ring: 0 0% 4%;
+        --radius: 0.5rem;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+}
+
+/* Subtle grid background */
+.bg-grid {
+    background-image:
+        linear-gradient(to right, rgba(10, 10, 10, 0.04) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(10, 10, 10, 0.04) 1px, transparent 1px);
+    background-size: 32px 32px;
+}
+
+.card-flat {
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    transition: all 0.2s ease-out;
+}
+
+.card-flat:hover {
+    transform: translateY(-2px);
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.04),
+        0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.card-flat.selected {
+    border-color: #0a0a0a;
+    box-shadow: 0 0 0 1px #0a0a0a inset;
+}
+
+/* Code block */
+.code-shell {
+    background: #0f172a;
+    color: #f8fafc;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #1e293b;
+}
+
+.code-shell pre {
+    margin: 0;
+    padding: 20px 24px;
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 60vh;
+    overflow: auto;
+}
+
+/* Scrollbar slim */
+.code-shell pre::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.code-shell pre::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 4px;
+}
