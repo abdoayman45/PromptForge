@@ -1,30 +1,31 @@
+"""
+PromptForge backend — FastAPI (production-ready, no MongoDB).
+Required env vars:
+  - EMERGENT_LLM_KEY
+  - CORS_ORIGINS (comma-separated, e.g. https://your-app.vercel.app)
+"""
 from fastapi import FastAPI, APIRouter, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import uuid
+import json
+import re
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import Literal
-import json
-import re
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / ".env")
 
-# MongoDB connection (kept for parity with template; not used by feature)
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+EMERGENT_LLM_KEY = os.environ["EMERGENT_LLM_KEY"]
+CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
 
-EMERGENT_LLM_KEY = os.environ['EMERGENT_LLM_KEY']
-
-app = FastAPI()
+app = FastAPI(title="PromptForge API", version="1.0.0")
 api_router = APIRouter(prefix="/api")
 
 
@@ -39,21 +40,21 @@ class AnalyzeRequest(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     interpretation: str
-    detected_language: str  # human-readable name e.g. "Arabic", "English", "French"
-    detected_language_code: str  # ISO code e.g. "ar", "en", "fr"
+    detected_language: str
+    detected_language_code: str
 
 
 class OptimizeRequest(BaseModel):
     model: TargetModel
     prompt: str = Field(..., min_length=1)
-    output_language: str = Field(..., min_length=1)  # e.g. "English" or "Arabic"
+    output_language: str = Field(..., min_length=1)
 
 
 class OptimizeResponse(BaseModel):
     optimized_prompt: str
 
 
-# Compact rules — focused on EXECUTION, not advisory output.
+# ---- Compact, execution-focused rules ----
 RULES_CONTEXT = """\
 You are an elite Prompt Engineer. Your job is to rewrite a user's raw prompt
 into a short, execution-driven prompt for ChatGPT, Claude, or Gemini.
@@ -109,45 +110,42 @@ Gemini — compact hierarchical:
 
 
 def _build_chat(session_id: str, system_message: str) -> LlmChat:
-    chat = LlmChat(
+    return LlmChat(
         api_key=EMERGENT_LLM_KEY,
         session_id=session_id,
         system_message=system_message,
     ).with_model("openai", "gpt-5.1")
-    return chat
 
 
 @api_router.get("/")
 async def root():
-    return {"message": "Prompt Optimizer API is running"}
+    return {"message": "PromptForge API is running", "status": "ok"}
+
+
+@api_router.get("/health")
+async def health():
+    return {"status": "healthy"}
 
 
 @api_router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_prompt(req: AnalyzeRequest):
-    """
-    Detect the language of the user's prompt, then restate their intent in
-    1–3 short sentences IN THAT SAME LANGUAGE so the user can confirm it.
-    """
     system = (
-        "You are a prompt-engineering analyst. You will receive a user's raw "
-        "prompt. Do TWO things:\n"
-        "1. Detect the natural language of the prompt.\n"
-        "2. Restate the user's intent in 1–3 short, plain sentences IN THAT "
-        "SAME DETECTED LANGUAGE. Focus on: (a) the underlying goal, (b) the "
-        "target audience or domain if implied, (c) the expected output. "
-        "Do NOT rewrite the prompt. Do NOT add commentary.\n\n"
-        "Return STRICT JSON only (no markdown fences) with exactly these keys:\n"
-        '{"detected_language": "<English name of the language, e.g. Arabic, '
-        'English, French, Spanish>", "detected_language_code": "<ISO 639-1 '
-        'code, e.g. ar, en, fr, es>", "interpretation": "<1-3 sentences in '
-        'the detected language>"}'
+        "You are a prompt-engineering analyst. Do TWO things:\n"
+        "1. Detect the natural language of the user's prompt.\n"
+        "2. Restate the user's intent in 1-3 short sentences IN THAT "
+        "SAME DETECTED LANGUAGE. Focus on: goal, audience/domain if implied, "
+        "expected output. Do NOT rewrite the prompt. Do NOT add commentary.\n\n"
+        "Return STRICT JSON only (no markdown fences):\n"
+        '{"detected_language": "<English name, e.g. Arabic, English, French>", '
+        '"detected_language_code": "<ISO 639-1, e.g. ar, en, fr>", '
+        '"interpretation": "<1-3 sentences in the detected language>"}'
     )
 
     chat = _build_chat(session_id=str(uuid.uuid4()), system_message=system)
     user_msg = UserMessage(
         text=(
             f"Target model: {req.model}\n"
-            f"User's raw prompt:\n\"\"\"\n{req.prompt}\n\"\"\"\n\n"
+            f'User\'s raw prompt:\n"""\n{req.prompt}\n"""\n\n'
             "Return the JSON now."
         )
     )
@@ -159,7 +157,6 @@ async def analyze_prompt(req: AnalyzeRequest):
         raise HTTPException(status_code=500, detail=f"LLM error: {e}")
 
     raw = str(response).strip()
-    # Strip code fences if present
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
 
@@ -173,7 +170,6 @@ async def analyze_prompt(req: AnalyzeRequest):
             ).strip().lower(),
         )
     except Exception:
-        # Fallback: return raw text as interpretation, default to English
         return AnalyzeResponse(
             interpretation=raw,
             detected_language="English",
@@ -183,10 +179,6 @@ async def analyze_prompt(req: AnalyzeRequest):
 
 @api_router.post("/optimize", response_model=OptimizeResponse)
 async def optimize_prompt(req: OptimizeRequest):
-    """
-    Rewrite the user's raw prompt into a short, execution-oriented, model-
-    specific prompt.
-    """
     model_shape = {
         "chatgpt": "Compact Markdown: Role / Task / Requirements / Output / Constraints.",
         "claude": "Compact XML: <role>, <task>, <requirements>, <output>, <constraints>.",
@@ -219,7 +211,7 @@ async def optimize_prompt(req: OptimizeRequest):
         f"REQUIRED SHAPE: {model_shape}\n\n"
         f'USER\'S RAW REQUEST:\n"""\n{req.prompt}\n"""\n\n'
         "Produce the optimized prompt now. Remember: execution-oriented, "
-        "≤250 words, no preamble."
+        "<=250 words, no preamble."
     )
 
     chat = _build_chat(session_id=str(uuid.uuid4()), system_message=system)
@@ -237,18 +229,12 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
-logger = logging.getLogger(__name__)
-
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
